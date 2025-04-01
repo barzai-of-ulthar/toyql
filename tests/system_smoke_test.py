@@ -29,10 +29,10 @@ class SystemSmokeTest(unittest.TestCase):
     def test_queries(self):
         """Test that query text on the command line is processed."""
         output = subprocess.check_output(
-            [self.dut, "query_1", "query_2"],
+            [self.dut, '"test string"', "7"],
             encoding="UTF-8")
-        self.assertIn("query_1", output)
-        self.assertIn("query_2", output)
+        self.assertIn('"test string"', output)
+        self.assertIn("7", output)
 
 
 if __name__ == "__main__":
