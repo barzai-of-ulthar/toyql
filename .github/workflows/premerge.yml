@@ -1,0 +1,16 @@
+name: premerge
+
+on:
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  precheck:
+    runs-on: ubuntu-22.04
+    steps:
+    - uses: actions/checkout@v4
+    - name: Run tests
+      run: ./precheck.sh
