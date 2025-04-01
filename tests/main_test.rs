@@ -1,6 +1,6 @@
 use lets_make_a_db::_main;
 
-// THIS FUNCTION MUST BE VACUOUS:  Rust-test cannot reach it.
+/// Smoke test:  Does our `main` actually run?
 fn main() {
     crate::_main();
 }
