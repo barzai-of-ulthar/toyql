@@ -16,7 +16,7 @@ struct Args {
     queries: Vec<String>,
 }
 
-fn run_from_args(args: Args) {
+fn run_from_args(args: Args) -> Result<(), i32> {
     for file in args.query_files {
         println!("I would parse the external file {}", file);
     }
@@ -27,14 +27,18 @@ fn run_from_args(args: Args) {
             Ok((r, literals::LiteralValue::Int(i))) => println!("Got int {} ...{}", i, r),
             Ok((r, literals::LiteralValue::Float(f))) => println!("Got float {} ...{}", f, r),
             Ok((r, literals::LiteralValue::String(s))) => println!("Got string \"{}\" ...{}", s, r),
-            Err(e) => panic!("parse error {}", e),
+            Err(e) => {
+                eprintln!("parse error {}", e);
+                return Err(1);
+            }
         }
     }
+    Ok(())
 }
 
 /// The "real" main entry point of our binary target, relocated to a lib so that
 /// rust-test can reach it.
-pub fn _main() {
+pub fn _main() -> Result<(), i32> {
     let args = Args::parse();
 
     run_from_args(args)
@@ -49,6 +53,7 @@ mod tests {
         run_from_args(Args {
             query_files: vec![],
             queries: vec![],
-        });
+        })
+        .unwrap();
     }
 }
