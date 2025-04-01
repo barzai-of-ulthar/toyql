@@ -6,10 +6,33 @@ import unittest  # To get pretty error messages.
 class SystemSmokeTest(unittest.TestCase):
     """The simplest possible system test."""
 
-    def test_smoke(self):
-        """Does this target run at all?"""
-        output = subprocess.check_output(["cargo", "run"], encoding="UTF-8")
-        self.assertEqual(output, "Hello, World!\n")
+    dut = "target/debug/toyql"
+
+    def test_help(self):
+        """Checks that we can run as far as the help text."""
+        output = subprocess.run(
+            [self.dut, "--help"],
+            capture_output=True,
+            encoding="UTF-8")
+        self.assertEqual(output.returncode, 0)
+        self.assertIn("ToyQL query engine", output.stdout)
+        self.assertEqual(output.stderr.rstrip(), "")
+
+    def test_files(self):
+        """Test that files on the command line are processed."""
+        output = subprocess.check_output(
+            [self.dut, "-f", "file_1", "-f", "file_2"],
+            encoding="UTF-8")
+        self.assertIn("file_1", output)
+        self.assertIn("file_2", output)
+
+    def test_queries(self):
+        """Test that query text on the command line is processed."""
+        output = subprocess.check_output(
+            [self.dut, "query_1", "query_2"],
+            encoding="UTF-8")
+        self.assertIn("query_1", output)
+        self.assertIn("query_2", output)
 
 
 if __name__ == "__main__":
