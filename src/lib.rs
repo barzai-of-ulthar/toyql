@@ -22,7 +22,7 @@ fn run_from_args(args: Args) -> Result<(), i32> {
     }
     for query in args.queries {
         println!("Executing the query {}", query);
-        let parsed_literal = literals::parsing::literal(&query);
+        let parsed_literal = literals::parsing::apply_grammar(&query);
         match parsed_literal {
             Ok((r, literals::LiteralValue::Int(i))) => println!("Got int {} ...{}", i, r),
             Ok((r, literals::LiteralValue::Float(f))) => println!("Got float {} ...{}", f, r),
