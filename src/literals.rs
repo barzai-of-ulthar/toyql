@@ -149,14 +149,14 @@ pub mod parsing {
             match str::parse::<String>(input) {
                 Ok(x) => {
                     let without_quotes = x.trim_matches('\"').to_string();
-                    let without_backslash = without_quotes.replace("\\", "");
-                    Ok(LiteralValue::String(without_backslash))
+                    Ok(LiteralValue::String(without_quotes))
                 }
                 Err(x) => Err(x),
             }
         }
 
         pub fn apply_grammar(input: &str) -> IResult<&str, LiteralValue> {
+            println!("Attempting to apply the string grammar to ->{}<-", input);
             let string_grammar = recognize(
                 delimited(
                     char('"'),
