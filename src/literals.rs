@@ -13,6 +13,19 @@ impl LiteralValue {
     fn serialize(&self) -> String {
         parsing::serialize(self)
     }
+
+    /// Check that `self` and `other` represent identical values, regardless of their equality
+    /// relation (i.e. with nan==nan semantics).
+    // TODO(barzai) This should also handle unicode polysemy!
+    #[allow(dead_code)]  // TODO!
+    fn identical(&self, other: &LiteralValue) -> bool {
+        if let LiteralValue::Float(l) = self {
+            if let LiteralValue::Float(r ) = other {
+                if l.is_nan() && r.is_nan() { return true; }
+            }
+        };
+        self == other
+    }
 }
 
 impl fmt::Display for LiteralValue {
@@ -122,12 +135,12 @@ pub mod parsing {
         }
     }
 
-    mod string {
+    pub mod string {
         use nom::branch::alt;
         use nom::bytes::complete::{escaped_transform, tag};
-        use nom::combinator::value;
+        use nom::combinator::{opt, value};
         use nom::character::complete::{char, none_of};
-        use nom::combinator::{map_res, recognize};
+        use nom::combinator::map_res;
         use nom::sequence::delimited;
         use nom::IResult;
         use nom::Parser;
@@ -140,38 +153,44 @@ pub mod parsing {
         // convert escapes into their meaning.
         //
         // Nom provides a method to both recognize a string and expand its escapes
-        // (`escaped_transform`) but I have been unable to make this work reliably within a
-        // larger grammar or on zero-length strings.  So we have to handle the representation
-        // part of this match a bit more care and do it in two phases:  First recognize the full
-        // grammar and remove the quotes, then perform escape expansion on the interior.
+        // (`escaped_transform`) but unlike other bits of nom it can't handle  zero-length
+        // strings.  So we have to handle the representation part of this match a bit more care.
+        //
+        // So be very careful editing this code.  The test cases here are *essential* and the
+        // errors are *wicked*.
 
-        fn make_repr(input: &str) -> Result<LiteralValue, std::string::ParseError> {
-            match str::parse::<String>(input) {
-                Ok(x) => {
-                    let without_quotes = x.trim_matches('\"').to_string();
-                    Ok(LiteralValue::String(without_quotes))
+        fn make_repr(input: Option<String>) -> Result<LiteralValue, std::string::ParseError> {
+            match input {
+                Some(s) => {
+                    match str::parse::<String>(&s) {
+                        Ok(x) => {
+                            Ok(LiteralValue::String(x))
+                        }
+                        Err(x) => Err(x),
+                   }
                 }
-                Err(x) => Err(x),
+                None => Ok(LiteralValue::String("".to_string()))
             }
         }
 
         pub fn apply_grammar(input: &str) -> IResult<&str, LiteralValue> {
-            println!("Attempting to apply the string grammar to ->{}<-", input);
-            let string_grammar = recognize(
+            let string_grammar = 
                 delimited(
                     char('"'),
-                    escaped_transform(
+                    opt(escaped_transform(
                         // A string encoding must exclude at least two points:  A record separator and
                         // an escape character.
                         none_of("\\\""),
                         '\\',
                         alt((
-                            //  This string...  is produced by this parse matching after an escape.
+                            // Read value(val, parser) as:
+                            //    The string `val` is is produced when the parse `parser` matches
+                            //    after an escape.
                             value("\\", tag("\\")),
                             value("\"", tag("\"")),
                             value("\n", tag("n")),
-                        ))),
-                    char('"'))
+                        )))),
+                    char('"')
             );
             map_res(string_grammar, make_repr).parse(input)
         }
@@ -205,6 +224,9 @@ pub mod parsing {
 pub mod parsing_sample_data {
     use rand::distr::StandardUniform;
     use rand::{Rng, SeedableRng, rngs::SmallRng};
+    use itertools::Itertools;
+
+    use super::parsing::{int, float, string};
 
     pub fn example_ints(how_many: usize) -> Vec<i64> {
         let mut how_many = how_many;
@@ -255,11 +277,22 @@ pub mod parsing_sample_data {
         };
         result
     }
+
+    // TODO(barzai) This only returns canonical forms, not weird stuff.
+    pub fn example_literal_representations(how_many: usize) -> Vec<String> {
+        example_ints(how_many).iter().map(|i| int::serialize(*i))
+            .interleave(
+                example_floats(how_many).iter().map(|f| float::serialize(*f))
+            )
+            .interleave(
+                example_strings(how_many).iter().map(|s| string::serialize(s))
+            ).take(how_many).collect()
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{parsing_sample_data::{example_floats, example_ints, example_strings}, *};
+    use super::{parsing_sample_data::{example_floats, example_ints, example_literal_representations, example_strings}, *};
 
     #[test]
     fn smoke_test() {
@@ -293,7 +326,7 @@ mod tests {
                         assert!(result.is_nan())
                     } else {
                         assert_eq!(f, result,
-                                   "Testing parse of {} serialized as {}", f, serialized);        
+                                   "Testing parse of {} serialized as {} deserializes to {}", f, serialized, deserialized);
                     }
                 }
                 _ => { assert!(false, "deserialize {} -> {} -> {} was not float",
@@ -311,11 +344,23 @@ mod tests {
             match deserialized {
                 LiteralValue::String(result) => {
                     assert_eq!(s, result,
-                               "Testing parse of {} serialized as {}", s, serialized);        
-                }
+                        "Testing parse of >{}< serialized as >{}< deserializes to >{}<", s, serialized, result);
+                    }
                 _ => { assert!(false, "deserialize {} -> {} -> {} was not string",
                                s, serialized, deserialized)}
             }
         }
+    }
+
+    #[test]
+    fn literal_round_trip() {
+        for serialized in example_literal_representations(100) {
+            let (remainder, deserialized) = parsing::apply_grammar(&serialized).unwrap();
+            assert!(remainder == "");  // Parse should be total.
+            let reserialized = LiteralValue::serialize(&deserialized);
+            let (remainder, re_deserialized) = parsing::apply_grammar(&reserialized).unwrap();
+            assert!(remainder == "");  // Parse should be total.
+            assert!(deserialized.identical(&re_deserialized));
+        } 
     }
 }
