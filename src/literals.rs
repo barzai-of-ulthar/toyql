@@ -11,11 +11,7 @@ pub enum LiteralValue {
 impl LiteralValue {
     #[allow(dead_code)]  // TODO!
     fn serialize(&self) -> String {
-        match self {
-            LiteralValue::Int(i) => i.to_string(),
-            LiteralValue::Float(f) => format!("{:-?}", f),
-            LiteralValue::String(s) => format!("\"{}\"", s),
-        }
+        parsing::serialize(self)
     }
 }
 
@@ -26,99 +22,182 @@ impl fmt::Display for LiteralValue {
 }
 
 pub mod parsing {
-    use std::convert::Infallible;
-
     use nom::branch::alt;
-    use nom::bytes::complete::tag;
-    use nom::character::complete::{anychar, char, none_of, one_of};
-    use nom::combinator::{map_res, opt, recognize};
+    use nom::character::complete::{char, one_of};
+    use nom::combinator::recognize;
     use nom::multi::{many0, many1};
-    use nom::sequence::preceded;
     use nom::sequence::terminated;
     use nom::IResult;
     use nom::Parser;
 
     use super::LiteralValue;
 
-    fn make_int(input: &str) -> Result<LiteralValue, std::num::ParseIntError> {
-        match str::parse::<i64>(input) {
-            Ok(x) => Ok(LiteralValue::Int(x)),
-            Err(x) => Err(x),
-        }
-    }
-
-    fn int(input: &str) -> IResult<&str, LiteralValue> {
-        map_res(recognize((opt(one_of("+-")), decimal)), make_int).parse(input)
-    }
-
-    fn make_float(input: &str) -> Result<LiteralValue, std::num::ParseFloatError> {
-        match str::parse::<f64>(input) {
-            Ok(x) => Ok(LiteralValue::Float(x)),
-            Err(x) => Err(x),
-        }
-    }
-
-    // Adapted from https://github.com/rust-bakery/nom/blob/main/doc/nom_recipes.md#floating-point-numbers
-    fn float_grammar(input: &str) -> IResult<&str, &str> {
-        recognize((
-            opt(one_of("+-")),
-            alt((
-                // Case one: .42
-                recognize((
-                    char('.'),
-                    decimal,
-                    opt((one_of("eE"), opt(one_of("+-")), decimal)),
-                )), // Case two: 42e42 and 42.42e42
-                recognize((
-                    decimal,
-                    opt(preceded(char('.'), decimal)),
-                    one_of("eE"),
-                    opt(one_of("+-")),
-                    decimal,
-                )), // Case three: 42. and 42.42
-                recognize((decimal, char('.'), opt(decimal))),
-                // Special cases
-                tag("inf"),
-                tag("NaN"),
-            ))
-        )).parse(input)
-    }
-
+    // General-purpose utility to extract any number of decimal digits with rust-style separator
+    // conventions.
     fn decimal(input: &str) -> IResult<&str, &str> {
         recognize(many1(terminated(one_of("0123456789"), many0(char('_'))))).parse(input)
     }
 
-    fn float(input: &str) -> IResult<&str, LiteralValue> {
-        map_res(recognize(float_grammar), make_float).parse(input)
-    }
+    // For each type, we need to have both a grammar (something that identifies and extracts
+    // text during parsing), an interpretation (something that turns the extracted text that
+    // matches the grammar into a usable representation) and a serialization (a way of turning
+    // that representation into something that satisfies the grammar).  For ease of understanding
+    // we break out these triads into per-type namespaces.
 
-    fn make_string(input: &str) -> Result<LiteralValue, Infallible> {
-        match str::parse::<String>(input) {
-            Ok(x) => {
-                let without_quotes = x.trim_matches('\"').to_string();
-                let without_backslash = without_quotes.replace("\\", "");
-                Ok(LiteralValue::String(without_backslash))
+    pub mod int {
+        use nom::IResult;
+        use nom::combinator::{map_res, opt, recognize};
+        use nom::character::complete::one_of;
+        use nom::Parser;
+
+        use crate::literals::LiteralValue;
+
+        pub fn make_repr(input: &str) -> Result<LiteralValue, std::num::ParseIntError> {
+            match str::parse::<i64>(input) {
+                Ok(x) => Ok(LiteralValue::Int(x)),
+                Err(x) => Err(x),
             }
-            Err(x) => Err(x),
+        }
+    
+        pub fn apply_grammar(input: &str) -> IResult<&str, LiteralValue> {
+            map_res(recognize((opt(one_of("+-")), super::decimal)), make_repr).parse(input)
+        }
+
+        pub fn serialize(v: i64) -> String {
+            v.to_string()
         }
     }
 
-    fn string(input: &str) -> IResult<&str, LiteralValue> {
-        let string_grammar = recognize((
-            char('"'),
-            many0(alt((
-                recognize((char('\\'), anychar)),
-                recognize(many1(none_of("\\\""))),
-            ))),
-            char('"'),
-        ));
-        map_res(recognize(string_grammar), make_string).parse(input)
+    pub mod float {
+        use nom::branch::alt;
+        use nom::bytes::complete::tag;
+        use nom::character::complete::{char, one_of};
+        use nom::combinator::{map_res, opt, recognize};
+        use nom::sequence::preceded;
+        use nom::IResult;
+        use nom::Parser;
+
+        use super::decimal;
+        use crate::literals::LiteralValue;
+
+        // Adapted from https://github.com/rust-bakery/nom/blob/main/doc/nom_recipes.md#floating-point-numbers
+        fn float_grammar(input: &str) -> IResult<&str, &str> {
+            recognize((
+                opt(one_of("+-")),
+                alt((
+                    // Case one: .42
+                    recognize((
+                        char('.'),
+                        decimal,
+                        opt((one_of("eE"), opt(one_of("+-")), decimal)),
+                    )), // Case two: 42e42 and 42.42e42
+                    recognize((
+                        decimal,
+                        opt(preceded(char('.'), decimal)),
+                        one_of("eE"),
+                        opt(one_of("+-")),
+                        decimal,
+                    )), // Case three: 42. and 42.42
+                    recognize((decimal, char('.'), opt(decimal))),
+                    // Special cases
+                    tag("inf"),
+                    tag("NaN"),
+                ))
+            )).parse(input)
+        }
+
+        pub fn apply_grammar(input: &str) -> IResult<&str, LiteralValue> {
+            map_res(recognize(float_grammar), make_repr).parse(input)
+        }
+
+        pub fn make_repr(input: &str) -> Result<LiteralValue, std::num::ParseFloatError> {
+            match str::parse::<f64>(input) {
+                Ok(x) => Ok(LiteralValue::Float(x)),
+                Err(x) => Err(x),
+            }
+        }
+
+        pub fn serialize(v: f64) -> String {
+            format!("{:-?}", v)
+        }
+    }
+
+    mod string {
+        use nom::branch::alt;
+        use nom::bytes::complete::{escaped_transform, tag};
+        use nom::combinator::value;
+        use nom::character::complete::{char, none_of};
+        use nom::combinator::{map_res, recognize};
+        use nom::sequence::delimited;
+        use nom::IResult;
+        use nom::Parser;
+    
+        use super::LiteralValue;
+    
+        // Strings are rather nastier than other types because of the combination of quoting,
+        // escaping, and possible emptiness.  We need to do two things:  Extract the interior of
+        // the quotes (which requires awareness of escaping so we don't use an escaped quote) and
+        // convert escapes into their meaning.
+        //
+        // Nom provides a method to both recognize a string and expand its escapes
+        // (`escaped_transform`) but I have been unable to make this work reliably within a
+        // larger grammar or on zero-length strings.  So we have to handle the representation
+        // part of this match a bit more care and do it in two phases:  First recognize the full
+        // grammar and remove the quotes, then perform escape expansion on the interior.
+
+        fn make_repr(input: &str) -> Result<LiteralValue, std::string::ParseError> {
+            match str::parse::<String>(input) {
+                Ok(x) => {
+                    let without_quotes = x.trim_matches('\"').to_string();
+                    let without_backslash = without_quotes.replace("\\", "");
+                    Ok(LiteralValue::String(without_backslash))
+                }
+                Err(x) => Err(x),
+            }
+        }
+
+        pub fn apply_grammar(input: &str) -> IResult<&str, LiteralValue> {
+            let string_grammar = recognize(
+                delimited(
+                    char('"'),
+                    escaped_transform(
+                        // A string encoding must exclude at least two points:  A record separator and
+                        // an escape character.
+                        none_of("\\\""),
+                        '\\',
+                        alt((
+                            //  This string...  is produced by this parse matching after an escape.
+                            value("\\", tag("\\")),
+                            value("\"", tag("\"")),
+                            value("\n", tag("n")),
+                        ))),
+                    char('"'))
+            );
+            map_res(string_grammar, make_repr).parse(input)
+        }
+
+        pub fn serialize(v: &str) -> String {
+            format!("\"{}\"", v
+                .replace("\\", "\\\\")
+                .replace("\n", "\\n")
+                .replace("\"", "\\\"")
+            )
+        }
     }
 
     /// Parse a literal of one of the atomic types (int, float, string); returns the remaining
     /// string and the LiteralValue in question.
-    pub fn literal(input: &str) -> IResult<&str, LiteralValue> {
-        alt((float, int, string)).parse(input)
+    pub fn apply_grammar(input: &str) -> IResult<&str, LiteralValue> {
+        alt((float::apply_grammar, int::apply_grammar, string::apply_grammar)).parse(input)
+    }
+
+    /// Turn a literal representation back into its serial form.
+    pub fn serialize(v: &LiteralValue) -> String {
+        match &v {
+            LiteralValue::Int(i) => int::serialize(*i),
+            LiteralValue::Float(f) => float::serialize(*f),
+            LiteralValue::String(s) => string::serialize(s)
+        }
     }
 }
 
@@ -159,8 +238,11 @@ pub mod parsing_sample_data {
         let mut how_many = how_many;
         let basic_examples: Vec<&str> = vec![
             "abc", "a", "100",
-            "\"", "\'", "\\", "",
-            "\\", "\\\\", "\\\\\\"
+            " \\ ",
+            "\'", "\n", "\\",
+            "\\\\", "\\\\\\",
+            "\"", 
+            "",
         ];
         let mut result: Vec<String> = basic_examples.iter().take(how_many)
             .map(|x| str::to_string(x)).collect();
@@ -181,10 +263,10 @@ mod tests {
 
     #[test]
     fn smoke_test() {
-        assert_eq!(parsing::literal("7"), Ok(("", LiteralValue::Int(7))));
-        assert_eq!(parsing::literal(".7"), Ok(("", LiteralValue::Float(0.7))));
+        assert_eq!(parsing::apply_grammar("7"), Ok(("", LiteralValue::Int(7))));
+        assert_eq!(parsing::apply_grammar(".7"), Ok(("", LiteralValue::Float(0.7))));
         assert_eq!(
-            parsing::literal("\"foo\""),
+            parsing::apply_grammar("\"foo\""),
             Ok(("", LiteralValue::String("foo".to_string())))
         );
     }
@@ -193,7 +275,7 @@ mod tests {
     fn int_round_trip() {
         for i in example_ints(100) {
             assert_eq!(Ok(("", LiteralValue::Int(i))),
-                       parsing::literal(&LiteralValue::Int(i).serialize()))
+                       parsing::apply_grammar(&LiteralValue::Int(i).serialize()))
         }
     }
 
@@ -203,7 +285,7 @@ mod tests {
     fn float_round_trip() {
         for f in example_floats(100) {
             let serialized = LiteralValue::Float(f).serialize();
-            let (remainder, deserialized) = parsing::literal(&serialized).unwrap();
+            let (remainder, deserialized) = parsing::apply_grammar(&serialized).unwrap();
             assert!(remainder == "");  // Parse should be total.
             match deserialized {
                 LiteralValue::Float(result) => {
@@ -211,7 +293,7 @@ mod tests {
                         assert!(result.is_nan())
                     } else {
                         assert_eq!(f, result,
-                                "Testing parse of {} serialized as {}", f, serialized);        
+                                   "Testing parse of {} serialized as {}", f, serialized);        
                     }
                 }
                 _ => { assert!(false, "deserialize {} -> {} -> {} was not float",
@@ -221,11 +303,19 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]  // TODO:  Fix string serialization to make this pass.
     fn string_round_trip() {
         for s in example_strings(100) {
-            assert_eq!(Ok(("", LiteralValue::String(s.clone()))),
-                       parsing::literal(&LiteralValue::String(s.clone()).serialize()))
+            let serialized = LiteralValue::String(s.clone()).serialize();
+            let (remainder, deserialized) = parsing::apply_grammar(&serialized).unwrap();
+            assert!(remainder == "");  // Parse should be total.
+            match deserialized {
+                LiteralValue::String(result) => {
+                    assert_eq!(s, result,
+                               "Testing parse of {} serialized as {}", s, serialized);        
+                }
+                _ => { assert!(false, "deserialize {} -> {} -> {} was not string",
+                               s, serialized, deserialized)}
+            }
         }
     }
 }
