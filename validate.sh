@@ -10,10 +10,10 @@ for f in ./tests/*.py ; do
 done
 
 # We should not have leaked development platform information into the repo.
-if [! -z `git grep $USER`] ; then
+if [ ! -z `git grep $USER`] ; then
     fail "Username is present in repo!"
 fi
-if [! -z `git grep $(hostname)`] ; then
+if [ ! -z `git grep $(hostname)`] ; then
     fail "hostname is present in repo!"
 fi
 
