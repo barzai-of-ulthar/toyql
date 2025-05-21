@@ -152,12 +152,14 @@ impl Drop for AtomicKVStringStore {
 
 #[cfg(test)]
 mod tests {
+    use crate::test_utils;
+
     use super::*;
 
     #[test]
     fn smoke_test() {
         // Once through the happy path of the API.
-        let mut dut = AtomicKVStringStore::new(StorageScope::Temporary, "smoke_test").unwrap();
+        let mut dut: AtomicKVStringStore = AtomicKVStringStore::new(StorageScope::Temporary, "smoke_test").unwrap();
         assert_eq!(dut.count(), 0);
         let key = dut.store(&"foo".to_string(), "foo_content").unwrap();
         assert_eq!(key, "foo");
@@ -166,5 +168,19 @@ mod tests {
         assert_eq!(value, "foo_content");
         assert!(dut.del(&key));
         assert_eq!(dut.count(), 0);
+    }
+
+    #[test]
+    fn key_and_values_test() {
+        let mut dut: AtomicKVStringStore = AtomicKVStringStore::new(StorageScope::Temporary, "smoke_test").unwrap();
+        for key in test_utils::example_strings(20) {
+            for value in test_utils::example_strings(20) {
+                assert_eq!(dut.store(&key, &value).unwrap(), key);
+                assert_eq!(dut.get(&key), Ok(value));
+            }
+        }
+        for key in test_utils::example_strings(20) {
+            assert!(dut.get(&key).is_ok());
+        }
     }
 }
