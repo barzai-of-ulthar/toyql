@@ -3,6 +3,9 @@ use clap::Parser;
 mod literals;
 mod storage;
 
+#[cfg(test)]
+mod test_utils;
+
 /// The ToyQL query engine.
 ///
 /// Processes queries, either from the command line or from a file.
