@@ -222,62 +222,10 @@ pub mod parsing {
 
 #[cfg(test)]
 pub mod parsing_sample_data {
-    use rand::distr::StandardUniform;
-    use rand::{Rng, SeedableRng, rngs::SmallRng};
     use itertools::Itertools;
-
+    use crate::test_utils::{example_ints, example_floats, example_strings};
     use super::parsing::{int, float, string};
-
-    pub fn example_ints(how_many: usize) -> Vec<i64> {
-        let mut how_many = how_many;
-        let basic_examples: Vec<i64> = vec![1, 0, i64::MAX, -1, i64::MIN, 100, 1000, -100];
-        let mut result: Vec<i64> = basic_examples.iter().take(how_many).cloned().collect();
-        how_many -= result.len();
-        if how_many > 0 {
-            let rng = SmallRng::seed_from_u64(42);
-            result.extend(rng.random_iter::<i64>().take(how_many));
-        }
-        result
-    }
-
-    pub fn example_floats(how_many: usize) -> Vec<f64> {
-        let mut how_many = how_many;
-        let basic_examples: Vec<f64> = vec![
-            1.0, 0.0, -1.0, 1e14, 1e-14, -0.0,
-            f64::MAX, f64::MIN_POSITIVE, f64::MIN, -f64::MIN_POSITIVE,
-            f64::INFINITY, f64::NEG_INFINITY, f64::NAN,
-            /* TODO:  Non-canonical NAN values */];
-        let mut result: Vec<f64> = basic_examples.iter().take(how_many).cloned().collect();
-        how_many -= result.len();
-        if how_many > 0 {
-            let rng = SmallRng::seed_from_u64(42);
-            result.extend(rng.random_iter::<f64>().take(how_many));
-        }
-        result
-    }
-
-    pub fn example_strings(how_many: usize) -> Vec<String> {
-        let mut how_many = how_many;
-        let basic_examples: Vec<&str> = vec![
-            "abc", "a", "100",
-            " \\ ",
-            "\'", "\n", "\\",
-            "\\\\", "\\\\\\",
-            "\"", 
-            "",
-        ];
-        let mut result: Vec<String> = basic_examples.iter().take(how_many)
-            .map(|x| str::to_string(x)).collect();
-        how_many -= result.len();
-        let mut rng = SmallRng::seed_from_u64(42);
-        for _ in 0..how_many {
-            let len: usize = rng.random_range(1..10);
-            let chars_to_add: Vec<char> = rng.clone().sample_iter(StandardUniform).take(len).collect();
-            result.push(chars_to_add.into_iter().collect());
-        };
-        result
-    }
-
+    
     // TODO(barzai) This only returns canonical forms, not weird stuff.
     pub fn example_literal_representations(how_many: usize) -> Vec<String> {
         example_ints(how_many).iter().map(|i| int::serialize(*i))
@@ -292,7 +240,10 @@ pub mod parsing_sample_data {
 
 #[cfg(test)]
 mod tests {
-    use super::{parsing_sample_data::{example_floats, example_ints, example_literal_representations, example_strings}, *};
+    use crate::literals::{parsing, LiteralValue};
+
+    use super::parsing_sample_data::example_literal_representations;
+    use crate::test_utils::{example_ints, example_floats, example_strings};
 
     #[test]
     fn smoke_test() {
