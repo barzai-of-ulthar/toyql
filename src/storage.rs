@@ -172,14 +172,15 @@ mod tests {
 
     #[test]
     fn key_and_values_test() {
-        let mut dut: AtomicKVStringStore = AtomicKVStringStore::new(StorageScope::Temporary, "smoke_test").unwrap();
-        for key in test_utils::example_strings(20) {
-            for value in test_utils::example_strings(20) {
+        let mut dut: AtomicKVStringStore = AtomicKVStringStore::new(
+            StorageScope::Temporary, "smoke_test").unwrap();
+        for key in test_utils::values::example_strings(20) {
+            for value in test_utils::values::example_strings(20) {
                 assert_eq!(dut.store(&key, &value).unwrap(), key);
                 assert_eq!(dut.get(&key), Ok(value));
             }
         }
-        for key in test_utils::example_strings(20) {
+        for key in test_utils::values::example_strings(20) {
             assert!(dut.get(&key).is_ok());
         }
     }

@@ -223,7 +223,7 @@ pub mod parsing {
 #[cfg(test)]
 pub mod parsing_sample_data {
     use itertools::Itertools;
-    use crate::test_utils::{example_ints, example_floats, example_strings};
+    use crate::test_utils::values::{example_ints, example_floats, example_strings};
     use super::parsing::{int, float, string};
     
     // TODO(barzai) This only returns canonical forms, not weird stuff.
@@ -243,7 +243,7 @@ mod tests {
     use crate::literals::{parsing, LiteralValue};
 
     use super::parsing_sample_data::example_literal_representations;
-    use crate::test_utils::{example_ints, example_floats, example_strings};
+    use crate::test_utils::values::{example_ints, example_floats, example_strings};
 
     #[test]
     fn smoke_test() {
